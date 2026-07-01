@@ -1,0 +1,39 @@
+name: ⟳ Sync com upstream
+
+on:
+  schedule:
+    - cron: '0 8 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  UPSTREAM: usestrix/strix
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: gh repo sync (fast-forward)
+        id: sync
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          gh repo sync ${{ github.repository }} --source ${{ env.UPSTREAM }}
+          echo "result=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Abrir issue se o sync falhou (fork divergiu)
+        if: steps.sync.outputs.result != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⟳ Sync manual necessário com ${process.env.UPSTREAM}`,
+              body: 'O fast-forward falhou — o fork tem commits próprios. Sincronize via branch + PR a partir do upstream.',
+              labels: ['sync-upstream'],
+            });
